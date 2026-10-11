@@ -11,6 +11,7 @@ Le programme principal est compilé en Go comme un binaire Linux ARMv7 statique.
 - `main.go` : récupération des données, dessin et affichage de l'écran
 - `main_test.go` : tests unitaires
 - `launcher.sh` : lance l'application et enregistre les erreurs dans `skyboard.log`
+- `nickelmenu.config` : entrée NickelMenu pour lancer SkyBoard
 - `config.example.json` : exemple de configuration sans identifiants
 - `cacert.pem` : certificats racines Mozilla intégrés pour HTTPS sur les anciens firmwares
 
@@ -29,13 +30,8 @@ Le binaire `skyboard-arm` doit être compilé pour ARMv7 ; un exécutable Window
 
 1. Copier `skyboard-arm`, `launcher.sh`, `cacert.pem`, `config.example.json` et un FBInk compilé avec la prise en charge des images dans `/mnt/onboard/.adds/kobo-skyboard/`. Le binaire se trouve dans `KoboRoot.tgz` de l'archive [KoboStuff](https://www.mobileread.com/forums/showthread.php?t=254214), sous `mnt/onboard/.niluje/usbnet/bin/fbink`. Extraire uniquement ce binaire ; ne pas installer toute l'archive KoboStuff. Le FBInk fourni par KOReader ne prend pas en charge l'affichage des images.
 2. Créer `config.json` à partir de `config.example.json` et renseigner les coordonnées de référence.
-3. Ajouter cette entrée à un fichier de configuration NickelMenu dans `/mnt/onboard/.adds/nm/` :
-
-   ```txt
-   menu_item :main :SkyBoard :cmd_spawn :quiet:/bin/sh /mnt/onboard/.adds/kobo-skyboard/launcher.sh
-   ```
-
-4. Éjecter proprement la liseuse et la redémarrer. Lancer ensuite **SkyBoard** depuis NickelMenu.
+3. Installer NickelMenu en copiant son paquet officiel `KoboRoot.tgz` dans `/mnt/onboard/.kobo/`. Créer `/mnt/onboard/.adds/nm/` si nécessaire et copier `nickelmenu.config` dedans sous le nom `config`.
+4. Éjecter proprement la liseuse et la redémarrer pour installer NickelMenu. Lancer ensuite **SkyBoard** depuis son menu.
 
 Le programme enregistre l'image dans `output/kobo_sky.png`, puis l'affiche directement sur la liseuse avec FBInk, en la mettant à l'échelle pour remplir tout le viewport Kobo. Si une ancienne configuration spécifie `eips` mais que cette commande est absente, SkyBoard bascule automatiquement sur FBInk placé dans son dossier. L'option `kobo.display_command` permet de choisir une autre commande d'affichage ; elle vaut `./fbink` par défaut. Le lien vers la page de la photo n'est plus cliquable dans ce mode natif. Les erreurs d'affichage et de réseau sont journalisées dans `skyboard.log`.
 
