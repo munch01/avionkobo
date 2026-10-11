@@ -238,6 +238,18 @@ func TestFlightLayoutUsesRegistrationThenFlightNumberAndTwoMetrics(t *testing.T)
 	}
 
 	img := renderScreen(config, flight, nil, time.Time{})
+	for _, row := range [][2]int{{270, 284}, {300, 314}, {338, 359}} {
+		left, right := darkPixelBounds(img, 18, config.Kobo.Width-18, row[0], row[1])
+		if left < 0 {
+			t.Errorf("flight text row at y=%d was not drawn", row[0])
+			continue
+		}
+		if center := (left + right) / 2; center < config.Kobo.Width/2-3 ||
+			center > config.Kobo.Width/2+3 {
+			t.Errorf("flight text row at y=%d is centered at x=%d, want x=%d",
+				row[0], center, config.Kobo.Width/2)
+		}
+	}
 	for i, centerX := range []int{200, 400} {
 		darkPixels := 0
 		for y := 390; y < 420; y++ {
@@ -269,6 +281,23 @@ func countDarkPixels(img *image.Gray, x1, x2, y1, y2 int) int {
 		}
 	}
 	return count
+}
+
+func darkPixelBounds(img *image.Gray, x1, x2, y1, y2 int) (int, int) {
+	left, right := img.Bounds().Dx(), -1
+	for y := y1; y < y2; y++ {
+		for x := x1; x < x2; x++ {
+			if img.GrayAt(x, y).Y < 200 {
+				if x < left {
+					left = x
+				}
+				if x > right {
+					right = x
+				}
+			}
+		}
+	}
+	return left, right
 }
 
 func TestRawFloatHandlesNull(t *testing.T) {

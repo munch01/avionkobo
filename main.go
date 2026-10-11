@@ -1174,9 +1174,9 @@ func renderScreen(config AppConfig, flight *Flight, weather *Weather, _ time.Tim
 		if flight.Origin != "" && flight.Destination != "" {
 			route = flight.Origin + " > " + flight.Destination
 		}
-		text(img, 36, 270, 2, shortened(flightSummary, (width-72)/12), 0)
-		text(img, 36, 300, 2, shortened(model, (width-72)/12), 0)
-		text(img, 36, 338, 3, shortened(route, (width-72)/18), 0)
+		centeredText(img, width/2, 270, 2, shortened(flightSummary, (width-72)/12), 0)
+		centeredText(img, width/2, 300, 2, shortened(model, (width-72)/12), 0)
+		centeredText(img, width/2, 338, 3, shortened(route, (width-72)/18), 0)
 		metricCenters := []int{width / 3, 2 * width / 3}
 		metricIcons := []string{"altitude", "speed"}
 		metricValues := []string{
