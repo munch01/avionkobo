@@ -27,7 +27,7 @@ Le binaire `skyboard-arm` doit être compilé pour ARMv7 ; un exécutable Window
 
 ## Installation sur la Kobo
 
-1. Copier `skyboard-arm`, `launcher.sh`, `cacert.pem`, `config.example.json` et l'exécutable `fbink` dans `/mnt/onboard/.adds/kobo-skyboard/`. FBInk est disponible dans l'archive Kobo de [KOReader v2026.07.1](https://github.com/koreader/koreader/releases/download/v2026.07.1/koreader-kobo-v2026.07.1.zip), sous `koreader/fbink`.
+1. Copier `skyboard-arm`, `launcher.sh`, `cacert.pem`, `config.example.json` et un FBInk compilé avec la prise en charge des images dans `/mnt/onboard/.adds/kobo-skyboard/`. Le binaire se trouve dans `KoboRoot.tgz` de l'archive [KoboStuff](https://www.mobileread.com/forums/showthread.php?t=254214), sous `mnt/onboard/.niluje/usbnet/bin/fbink`. Extraire uniquement ce binaire ; ne pas installer toute l'archive KoboStuff. Le FBInk fourni par KOReader ne prend pas en charge l'affichage des images.
 2. Créer `config.json` à partir de `config.example.json` et renseigner les coordonnées de référence.
 3. Ajouter cette entrée à un fichier de configuration NickelMenu dans `/mnt/onboard/.adds/nm/` :
 
