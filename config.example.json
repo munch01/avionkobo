@@ -8,7 +8,7 @@
     "width": 600,
     "height": 800,
     "refresh_seconds": 20,
-    "display_command": "eips"
+    "display_command": "./fbink"
   },
   "opensky": {
     "radius_km": 80,

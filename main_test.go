@@ -76,7 +76,7 @@ func TestLoadConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	if config.Kobo.Width != 600 || config.Kobo.Height != 800 ||
-		config.Kobo.RefreshSeconds != 20 || config.Kobo.DisplayCommand != "eips" {
+		config.Kobo.RefreshSeconds != 20 || config.Kobo.DisplayCommand != "./fbink" {
 		t.Fatalf("unexpected defaults: %+v", config.Kobo)
 	}
 }
@@ -713,9 +713,9 @@ func TestRequestJSONClassifiesSafeAPIErrorsWithoutLeakingDescription(t *testing.
 	}
 }
 
-func TestShowScreenWritesPNGAndDisplaysItWithEips(t *testing.T) {
+func TestShowScreenWritesPNGAndDisplaysItWithConfiguredCommand(t *testing.T) {
 	if runtime.GOOS != "linux" {
-		t.Skip("the Kobo eips launcher is a Linux command")
+		t.Skip("the Kobo display launcher is a Linux command")
 	}
 	dir := t.TempDir()
 	oldDir, err := os.Getwd()
@@ -731,13 +731,13 @@ func TestShowScreenWritesPNGAndDisplaysItWithEips(t *testing.T) {
 		}
 	})
 
-	argumentFile := filepath.Join(dir, "eips-args.txt")
-	commandFile := filepath.Join(dir, "eips")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$SKYBOARD_EIPS_ARGS\"\n"
+	argumentFile := filepath.Join(dir, "display-args.txt")
+	commandFile := filepath.Join(dir, "display-command")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$SKYBOARD_DISPLAY_ARGS\"\n"
 	if err := os.WriteFile(commandFile, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SKYBOARD_EIPS_ARGS", argumentFile)
+	t.Setenv("SKYBOARD_DISPLAY_ARGS", argumentFile)
 
 	config := AppConfig{}
 	config.Kobo.Width = 600
@@ -773,6 +773,54 @@ func TestShowScreenWritesPNGAndDisplaysItWithEips(t *testing.T) {
 	}
 	expected := "-f\n-g\n" + imagePath + "\n"
 	if string(args) != expected {
-		t.Fatalf("eips arguments = %q, want %q", args, expected)
+		t.Fatalf("display command arguments = %q, want %q", args, expected)
+	}
+}
+
+func TestShowScreenFallsBackToFBInkWhenEipsIsUnavailable(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("the Kobo display launcher is a Linux command")
+	}
+	dir := t.TempDir()
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(oldDir); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	})
+
+	argumentFile := filepath.Join(dir, "fbink-args.txt")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$SKYBOARD_FBINK_ARGS\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "fbink"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SKYBOARD_FBINK_ARGS", argumentFile)
+
+	config := AppConfig{}
+	config.Kobo.Width = 600
+	config.Kobo.Height = 800
+	config.Kobo.DisplayCommand = filepath.Join(dir, "missing", "eips")
+	app, err := NewSkyboard(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.showScreen(nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	args, err := os.ReadFile(argumentFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	imagePath := filepath.Join(dir, screenImagePath)
+	expected := "-f\n-i\n" + imagePath + "\n"
+	if string(args) != expected {
+		t.Fatalf("FBInk arguments = %q, want %q", args, expected)
 	}
 }

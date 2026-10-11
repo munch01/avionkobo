@@ -142,7 +142,7 @@ func loadConfig() (AppConfig, error) {
 		config.Kobo.RefreshSeconds = 20
 	}
 	if strings.TrimSpace(config.Kobo.DisplayCommand) == "" {
-		config.Kobo.DisplayCommand = "eips"
+		config.Kobo.DisplayCommand = "./fbink"
 	}
 	if config.OpenSky.RadiusKM <= 0 {
 		config.OpenSky.RadiusKM = 80
@@ -152,7 +152,7 @@ func loadConfig() (AppConfig, error) {
 
 func NewSkyboard(config AppConfig) (*Skyboard, error) {
 	if strings.TrimSpace(config.Kobo.DisplayCommand) == "" {
-		config.Kobo.DisplayCommand = "eips"
+		config.Kobo.DisplayCommand = "./fbink"
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(bundledCAPEM) {
@@ -1232,11 +1232,25 @@ func (app *Skyboard) showScreen(flight *Flight, weather *Weather) error {
 	if err != nil {
 		return fmt.Errorf("resolve screen image path: %w", err)
 	}
-	command := exec.Command(app.config.Kobo.DisplayCommand, "-f", "-g", imagePath)
+	displayCommand := app.config.Kobo.DisplayCommand
+	displayArgs := []string{"-f", "-g", imagePath}
+	if strings.EqualFold(filepath.Base(displayCommand), "fbink") {
+		displayArgs = []string{"-f", "-i", imagePath}
+	}
+	if _, err := exec.LookPath(displayCommand); err != nil {
+		if !errors.Is(err, exec.ErrNotFound) ||
+			!strings.EqualFold(filepath.Base(displayCommand), "eips") {
+			return fmt.Errorf("find screen display command %q: %w", displayCommand, err)
+		}
+		displayCommand = "./fbink"
+		displayArgs = []string{"-f", "-i", imagePath}
+		log.Printf("eips is unavailable; falling back to FBInk in the application directory")
+	}
+	command := exec.Command(displayCommand, displayArgs...)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("display screen with %q: %w: %s",
-			app.config.Kobo.DisplayCommand, err, strings.TrimSpace(string(output)))
+			displayCommand, err, strings.TrimSpace(string(output)))
 	}
 	if flight == nil || len(flight.Photo) == 0 {
 		app.metadataMu.Lock()
