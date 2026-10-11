@@ -37,7 +37,7 @@ Le binaire `skyboard-arm` doit être compilé pour ARMv7 ; un exécutable Window
 
 4. Éjecter proprement la liseuse et la redémarrer. Lancer ensuite **SkyBoard** depuis NickelMenu.
 
-Le programme enregistre l'image dans `output/kobo_sky.png`, puis l'affiche directement sur la liseuse avec `fbink -f -i`. Si une ancienne configuration spécifie `eips` mais que cette commande est absente, SkyBoard bascule automatiquement sur FBInk placé dans son dossier. L'option `kobo.display_command` permet de choisir une autre commande d'affichage ; elle vaut `./fbink` par défaut. Le lien vers la page de la photo n'est plus cliquable dans ce mode natif. Les erreurs d'affichage et de réseau sont journalisées dans `skyboard.log`.
+Le programme enregistre l'image dans `output/kobo_sky.png`, puis l'affiche directement sur la liseuse avec FBInk, en la mettant à l'échelle pour remplir tout le viewport Kobo. Si une ancienne configuration spécifie `eips` mais que cette commande est absente, SkyBoard bascule automatiquement sur FBInk placé dans son dossier. L'option `kobo.display_command` permet de choisir une autre commande d'affichage ; elle vaut `./fbink` par défaut. Le lien vers la page de la photo n'est plus cliquable dans ce mode natif. Les erreurs d'affichage et de réseau sont journalisées dans `skyboard.log`.
 
 ## Configuration
 

@@ -1235,7 +1235,7 @@ func (app *Skyboard) showScreen(flight *Flight, weather *Weather) error {
 	displayCommand := app.config.Kobo.DisplayCommand
 	displayArgs := []string{"-f", "-g", imagePath}
 	if strings.EqualFold(filepath.Base(displayCommand), "fbink") {
-		displayArgs = []string{"-f", "-i", imagePath}
+		displayArgs = []string{"-f", "-g", "w=-1,h=-1", "-i", imagePath}
 	}
 	if _, err := exec.LookPath(displayCommand); err != nil {
 		if !errors.Is(err, exec.ErrNotFound) ||
@@ -1243,7 +1243,7 @@ func (app *Skyboard) showScreen(flight *Flight, weather *Weather) error {
 			return fmt.Errorf("find screen display command %q: %w", displayCommand, err)
 		}
 		displayCommand = "./fbink"
-		displayArgs = []string{"-f", "-i", imagePath}
+		displayArgs = []string{"-f", "-g", "w=-1,h=-1", "-i", imagePath}
 		log.Printf("eips is unavailable; falling back to FBInk in the application directory")
 	}
 	command := exec.Command(displayCommand, displayArgs...)

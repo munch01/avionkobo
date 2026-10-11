@@ -819,7 +819,7 @@ func TestShowScreenFallsBackToFBInkWhenEipsIsUnavailable(t *testing.T) {
 		t.Fatal(err)
 	}
 	imagePath := filepath.Join(dir, screenImagePath)
-	expected := "-f\n-i\n" + imagePath + "\n"
+	expected := "-f\n-g\nw=-1,h=-1\n-i\n" + imagePath + "\n"
 	if string(args) != expected {
 		t.Fatalf("FBInk arguments = %q, want %q", args, expected)
 	}
