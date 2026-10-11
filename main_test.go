@@ -70,6 +70,19 @@ func TestDashboardListenerAcceptsConnections(t *testing.T) {
 	}
 }
 
+func TestDashboardUsesFullViewportWithoutImageLetterboxing(t *testing.T) {
+	html := string(dashboardHTML)
+	for _, expected := range []string{
+		"maximum-scale=1, user-scalable=no",
+		"position: fixed",
+		"object-fit: fill",
+	} {
+		if !strings.Contains(html, expected) {
+			t.Errorf("dashboard HTML does not enable full-screen layout: missing %q", expected)
+		}
+	}
+}
+
 func TestHaversineSamePoint(t *testing.T) {
 	if got := haversineKM(45.6833, 0.2167, 45.6833, 0.2167); got != 0 {
 		t.Fatalf("same-point distance = %v, want 0", got)
@@ -199,6 +212,41 @@ func TestWeatherLayoutOmitsPlaceAndDrawsFourIcons(t *testing.T) {
 	}
 }
 
+func TestFlightLayoutUsesRegistrationThenFlightNumberAndTwoMetrics(t *testing.T) {
+	config := AppConfig{}
+	config.Kobo.Width = 600
+	config.Kobo.Height = 800
+	altitude, speed := 34000.0, 780.0
+	flight := &Flight{
+		Airline:       "Air France",
+		Registration:  "F-HEPJ",
+		FlightNumber:  "AF77",
+		AircraftModel: "Airbus A320neo",
+		AltitudeFeet:  &altitude,
+		SpeedKMH:      &speed,
+		DistanceKM:    12.3,
+	}
+	summary, _ := flightDisplayLines(flight)
+	if summary != "Air France / F-HEPJ / AF77" {
+		t.Fatalf("flight summary = %q", summary)
+	}
+
+	img := renderScreen(config, flight, nil, time.Time{})
+	for i, centerX := range []int{200, 400} {
+		darkPixels := 0
+		for y := 390; y < 420; y++ {
+			for x := centerX - 20; x <= centerX+20; x++ {
+				if img.GrayAt(x, y).Y < 255 {
+					darkPixels++
+				}
+			}
+		}
+		if darkPixels == 0 {
+			t.Errorf("flight metric icon %d has no visible pixels", i+1)
+		}
+	}
+}
+
 func TestRawFloatHandlesNull(t *testing.T) {
 	if rawFloat(json.RawMessage("null")) != nil {
 		t.Fatal("null JSON value should not become a number")
@@ -241,11 +289,12 @@ func TestAircraftDetailsFormatting(t *testing.T) {
 func TestFlightDisplayLinesSeparateAircraftModel(t *testing.T) {
 	summary, model := flightDisplayLines(&Flight{
 		Airline:       "Air France",
+		Registration:  "F-HEPJ",
 		FlightNumber:  "AF77",
 		AircraftModel: "Airbus A320-251N NEO",
 	})
-	if summary != "Air France / AF77" {
-		t.Fatalf("flight summary = %q, want Air France / AF77", summary)
+	if summary != "Air France / F-HEPJ / AF77" {
+		t.Fatalf("flight summary = %q, want Air France / F-HEPJ / AF77", summary)
 	}
 	if model != "Airbus A320-251N NEO" {
 		t.Fatalf("aircraft model line = %q", model)
@@ -420,8 +469,8 @@ func TestNearestFlightLoadsRouteAndAircraftDetails(t *testing.T) {
 		if flight.Origin != "Paris" || flight.Destination != "New York" {
 			t.Fatalf("route = %q to %q, want Paris to New York", flight.Origin, flight.Destination)
 		}
-		if got := flight.Airline + " / " + flight.Registration + " / " + flight.AircraftModel; got != "Air France / F-HEPJ / Airbus A320-251N NEO" {
-			t.Fatalf("single-line flight summary = %q", got)
+		if got := flight.Airline + " / " + flight.Registration + " / " + flight.FlightNumber; got != "Air France / F-HEPJ / AF77" {
+			t.Fatalf("flight summary = %q", got)
 		}
 		if flight.AltitudeFeet == nil || *flight.AltitudeFeet != 34000 {
 			t.Fatalf("altitude in feet = %v, want 34000", flight.AltitudeFeet)

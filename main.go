@@ -1116,6 +1116,28 @@ func drawWeatherIcon(img *image.Gray, kind string, centerX, topY int) {
 	}
 }
 
+func drawFlightIcon(img *image.Gray, kind string, centerX, topY int) {
+	switch kind {
+	case "altitude":
+		line(img, centerX, topY+23, centerX, topY+3, 2, 0)
+		line(img, centerX, topY+3, centerX-8, topY+11, 2, 0)
+		line(img, centerX, topY+3, centerX+8, topY+11, 2, 0)
+		line(img, centerX-16, topY+26, centerX+16, topY+26, 2, 0)
+		line(img, centerX-12, topY+22, centerX-12, topY+26, 2, 0)
+		line(img, centerX+12, topY+22, centerX+12, topY+26, 2, 0)
+	case "speed":
+		line(img, centerX-17, topY+23, centerX-17, topY+15, 2, 0)
+		line(img, centerX-17, topY+15, centerX-11, topY+6, 2, 0)
+		line(img, centerX-11, topY+6, centerX, topY+2, 2, 0)
+		line(img, centerX, topY+2, centerX+11, topY+6, 2, 0)
+		line(img, centerX+11, topY+6, centerX+17, topY+15, 2, 0)
+		line(img, centerX+17, topY+15, centerX+17, topY+23, 2, 0)
+		line(img, centerX-17, topY+23, centerX+17, topY+23, 2, 0)
+		line(img, centerX, topY+20, centerX+8, topY+10, 2, 0)
+		disk(img, centerX, topY+20, 3, 0)
+	}
+}
+
 func centeredText(img *image.Gray, centerX, y, scale int, value string, shade uint8) {
 	text(img, centerX-len([]rune(value))*6*scale/2, y, scale, value, shade)
 }
@@ -1124,8 +1146,9 @@ func flightDisplayLines(flight *Flight) (string, string) {
 	callsign := strings.ReplaceAll(flight.Callsign, " ", "")
 	company := firstNonEmpty(flight.Airline, "COMPAGNIE INCONNUE")
 	flightNumber := firstNonEmpty(flight.FlightNumber, callsign)
+	registration := firstNonEmpty(flight.Registration, callsign)
 	model := firstNonEmpty(flight.AircraftModel, flight.AircraftType, "TYPE INCONNU")
-	return company + " / " + flightNumber, model
+	return company + " / " + registration + " / " + flightNumber, model
 }
 
 func renderScreen(config AppConfig, flight *Flight, weather *Weather, _ time.Time) *image.Gray {
@@ -1154,9 +1177,20 @@ func renderScreen(config AppConfig, flight *Flight, weather *Weather, _ time.Tim
 		text(img, 36, 270, 2, shortened(flightSummary, (width-72)/12), 0)
 		text(img, 36, 300, 2, shortened(model, (width-72)/12), 0)
 		text(img, 36, 338, 3, shortened(route, (width-72)/18), 0)
-		text(img, 36, 396, 3, "ALT "+number(flight.AltitudeFeet, 0)+" FT", 0)
-		text(img, 36, 440, 3, "VIT "+number(flight.SpeedKMH, 0)+" KM/H", 0)
-		text(img, 36, 484, 2, "DIST "+strconv.FormatFloat(flight.DistanceKM, 'f', 1, 64)+" KM", 0)
+		metricCenters := []int{width / 3, 2 * width / 3}
+		metricIcons := []string{"altitude", "speed"}
+		metricLabels := []string{"ALTITUDE", "VITESSE"}
+		metricValues := []string{
+			number(flight.AltitudeFeet, 0) + " FT",
+			number(flight.SpeedKMH, 0) + " KM/H",
+		}
+		for i, centerX := range metricCenters {
+			drawFlightIcon(img, metricIcons[i], centerX, 390)
+			centeredText(img, centerX, 426, 2, metricLabels[i], 0)
+			centeredText(img, centerX, 456, 2, metricValues[i], 0)
+		}
+		centeredText(img, width/2, 510, 2,
+			"DIST "+strconv.FormatFloat(flight.DistanceKM, 'f', 1, 64)+" KM", 0)
 	} else {
 		text(img, 36, 360, 3, "AUCUN AVION DETECTE", 0)
 	}
