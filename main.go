@@ -1179,15 +1179,13 @@ func renderScreen(config AppConfig, flight *Flight, weather *Weather, _ time.Tim
 		text(img, 36, 338, 3, shortened(route, (width-72)/18), 0)
 		metricCenters := []int{width / 3, 2 * width / 3}
 		metricIcons := []string{"altitude", "speed"}
-		metricLabels := []string{"ALTITUDE", "VITESSE"}
 		metricValues := []string{
 			number(flight.AltitudeFeet, 0) + " FT",
 			number(flight.SpeedKMH, 0) + " KM/H",
 		}
 		for i, centerX := range metricCenters {
 			drawFlightIcon(img, metricIcons[i], centerX, 390)
-			centeredText(img, centerX, 426, 2, metricLabels[i], 0)
-			centeredText(img, centerX, 456, 2, metricValues[i], 0)
+			centeredText(img, centerX, 438, 2, metricValues[i], 0)
 		}
 		centeredText(img, width/2, 510, 2,
 			"DIST "+strconv.FormatFloat(flight.DistanceKM, 'f', 1, 64)+" KM", 0)
@@ -1200,7 +1198,6 @@ func renderScreen(config AppConfig, flight *Flight, weather *Weather, _ time.Tim
 	if weather != nil {
 		centers := []int{width / 8, 3 * width / 8, 5 * width / 8, 7 * width / 8}
 		icons := []string{"temperature", "wind", "humidity", "rain"}
-		labels := []string{"TEMP", "VENT", "HUMID", "PLUIE"}
 		values := []string{
 			number(weather.Temperature, 1) + " C",
 			number(weather.WindKMH, 0) + " KM/H",
@@ -1209,8 +1206,7 @@ func renderScreen(config AppConfig, flight *Flight, weather *Weather, _ time.Tim
 		}
 		for i, centerX := range centers {
 			drawWeatherIcon(img, icons[i], centerX, 600)
-			centeredText(img, centerX, 648, 2, labels[i], 0)
-			centeredText(img, centerX, 688, 2, values[i], 0)
+			centeredText(img, centerX, 668, 2, values[i], 0)
 		}
 	} else {
 		text(img, 36, 620, 3, "METEO INDISPONIBLE", 0)

@@ -209,6 +209,12 @@ func TestWeatherLayoutOmitsPlaceAndDrawsFourIcons(t *testing.T) {
 		if darkPixels == 0 {
 			t.Errorf("weather icon %d has no visible pixels", i+1)
 		}
+		if countDarkPixels(withPlace, centerX-60, centerX+60, 648, 665) != 0 {
+			t.Errorf("weather icon %d still has a text label", i+1)
+		}
+		if countDarkPixels(withPlace, centerX-60, centerX+60, 668, 684) == 0 {
+			t.Errorf("weather icon %d has no value beneath it", i+1)
+		}
 	}
 }
 
@@ -244,7 +250,25 @@ func TestFlightLayoutUsesRegistrationThenFlightNumberAndTwoMetrics(t *testing.T)
 		if darkPixels == 0 {
 			t.Errorf("flight metric icon %d has no visible pixels", i+1)
 		}
+		if countDarkPixels(img, centerX-70, centerX+70, 421, 435) != 0 {
+			t.Errorf("flight metric icon %d still has a text label", i+1)
+		}
+		if countDarkPixels(img, centerX-70, centerX+70, 438, 454) == 0 {
+			t.Errorf("flight metric icon %d has no value beneath it", i+1)
+		}
 	}
+}
+
+func countDarkPixels(img *image.Gray, x1, x2, y1, y2 int) int {
+	count := 0
+	for y := y1; y < y2; y++ {
+		for x := x1; x < x2; x++ {
+			if img.GrayAt(x, y).Y < 200 {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 func TestRawFloatHandlesNull(t *testing.T) {
