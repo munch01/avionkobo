@@ -982,9 +982,46 @@ var glyphs = map[rune][7]string{
 	' ': {"00000", "00000", "00000", "00000", "00000", "00000", "00000"},
 }
 
+var specialGlyphs = map[rune][7]string{
+	'!':  {"00100", "00100", "00100", "00100", "00100", "00000", "00100"},
+	'\'': {"00100", "00100", "00000", "00000", "00000", "00000", "00000"},
+	'&':  {"01100", "10010", "10100", "01000", "10101", "10010", "01101"},
+	'+':  {"00000", "00100", "00100", "11111", "00100", "00100", "00000"},
+	'_':  {"00000", "00000", "00000", "00000", "00000", "00000", "11111"},
+	'"':  {"01010", "01010", "00000", "00000", "00000", "00000", "00000"},
+	'<':  {"00010", "00100", "01000", "10000", "01000", "00100", "00010"},
+	'=':  {"00000", "00000", "11111", "00000", "11111", "00000", "00000"},
+	';':  {"00000", "00110", "00110", "00000", "00110", "00110", "00100"},
+	'*':  {"00000", "10101", "01110", "11111", "01110", "10101", "00000"},
+}
+
+var textTransliterator = strings.NewReplacer(
+	"À", "A", "Á", "A", "Â", "A", "Ã", "A", "Ä", "A", "Å", "A",
+	"à", "a", "á", "a", "â", "a", "ã", "a", "ä", "a", "å", "a",
+	"Ç", "C", "Ć", "C", "Č", "C", "ç", "c", "ć", "c", "č", "c",
+	"È", "E", "É", "E", "Ê", "E", "Ë", "E", "è", "e", "é", "e", "ê", "e", "ë", "e",
+	"Ì", "I", "Í", "I", "Î", "I", "Ï", "I", "ì", "i", "í", "i", "î", "i", "ï", "i",
+	"Ñ", "N", "Ń", "N", "ñ", "n", "ń", "n",
+	"Ò", "O", "Ó", "O", "Ô", "O", "Õ", "O", "Ö", "O", "Ø", "O",
+	"ò", "o", "ó", "o", "ô", "o", "õ", "o", "ö", "o", "ø", "o",
+	"Œ", "OE", "œ", "oe",
+	"Ù", "U", "Ú", "U", "Û", "U", "Ü", "U", "ù", "u", "ú", "u", "û", "u", "ü", "u",
+	"Ý", "Y", "Ÿ", "Y", "ý", "y", "ÿ", "y",
+	"Æ", "AE", "æ", "ae", "ß", "ss",
+	"’", "'", "‘", "'", "“", "\"", "”", "\"", "–", "-", "—", "-", "…", "...",
+	"°", "O",
+)
+
+func displayText(value string) string {
+	return strings.ToUpper(textTransliterator.Replace(value))
+}
+
 func text(img *image.Gray, x, y, scale int, value string, shade uint8) {
-	for _, char := range strings.ToUpper(value) {
+	for _, char := range displayText(value) {
 		glyph, exists := glyphs[char]
+		if !exists {
+			glyph, exists = specialGlyphs[char]
+		}
 		if !exists {
 			glyph = glyphs['?']
 		}
@@ -1081,7 +1118,11 @@ func shortened(value string, maxCharacters int) string {
 	if len(runes) <= maxCharacters || maxCharacters < 2 {
 		return value
 	}
-	return string(runes[:maxCharacters-1]) + "?"
+	suffix := "..."
+	if maxCharacters < len(suffix)+1 {
+		suffix = "."
+	}
+	return string(runes[:maxCharacters-len(suffix)]) + suffix
 }
 
 func drawWeatherIcon(img *image.Gray, kind string, centerX, topY int) {
@@ -1141,7 +1182,7 @@ func drawFlightIcon(img *image.Gray, kind string, centerX, topY int) {
 }
 
 func centeredText(img *image.Gray, centerX, y, scale int, value string, shade uint8) {
-	text(img, centerX-len([]rune(value))*6*scale/2, y, scale, value, shade)
+	text(img, centerX-len([]rune(displayText(value)))*6*scale/2, y, scale, value, shade)
 }
 
 func flightDisplayLines(flight *Flight) (string, string) {

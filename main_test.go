@@ -314,6 +314,30 @@ func TestFlightDisplayLinesSeparateAircraftModel(t *testing.T) {
 	}
 }
 
+func TestTextTransliteratesAccentsAndDrawsCommonSpecialCharacters(t *testing.T) {
+	accented := image.NewGray(image.Rect(0, 0, 600, 40))
+	unaccented := image.NewGray(image.Rect(0, 0, 600, 40))
+	fillRect(accented, 0, 0, 600, 40, 255)
+	fillRect(unaccented, 0, 0, 600, 40, 255)
+	text(accented, 0, 0, 2, "Été à São Paulo", 0)
+	text(unaccented, 0, 0, 2, "ETE A SAO PAULO", 0)
+	if !bytes.Equal(accented.Pix, unaccented.Pix) {
+		t.Fatal("accented Latin letters should render as their unaccented equivalents")
+	}
+
+	text(accented, 0, 20, 2, "A&B!'", 0)
+	text(unaccented, 0, 20, 2, "A?B??", 0)
+	if bytes.Equal(accented.Pix, unaccented.Pix) {
+		t.Fatal("supported special characters should not render as question marks")
+	}
+}
+
+func TestShortenedUsesEllipsisInsteadOfQuestionMark(t *testing.T) {
+	if got := shortened("Airbus A320neo", 10); got != "Airbus ..." {
+		t.Fatalf("shortened text = %q, want %q", got, "Airbus ...")
+	}
+}
+
 func TestNormalizeFlightNumberRemovesCallsignSuffix(t *testing.T) {
 	for input, want := range map[string]string{
 		"AF77MQ":  "AF77",
