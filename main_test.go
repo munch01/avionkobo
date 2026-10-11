@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -40,47 +41,6 @@ func (transport *aircraftPhotoTransport) RoundTrip(request *http.Request) (*http
 		}, nil
 	}
 	return transport.fallback.RoundTrip(request)
-}
-
-func TestDashboardListenerAcceptsConnections(t *testing.T) {
-	listener, err := newDashboardListener("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer listener.Close()
-
-	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("dashboard ready"))
-		}),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-	go func() {
-		_ = server.Serve(listener)
-	}()
-
-	client := http.Client{Timeout: time.Second}
-	response, err := client.Get("http://" + listener.Addr().String() + "/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("dashboard HTTP status = %d, want 200", response.StatusCode)
-	}
-}
-
-func TestDashboardUsesFullViewportWithoutImageLetterboxing(t *testing.T) {
-	html := string(dashboardHTML)
-	for _, expected := range []string{
-		"maximum-scale=1, user-scalable=no",
-		"position: fixed",
-		"object-fit: fill",
-	} {
-		if !strings.Contains(html, expected) {
-			t.Errorf("dashboard HTML does not enable full-screen layout: missing %q", expected)
-		}
-	}
 }
 
 func TestHaversineSamePoint(t *testing.T) {
@@ -116,7 +76,7 @@ func TestLoadConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	if config.Kobo.Width != 600 || config.Kobo.Height != 800 ||
-		config.Kobo.RefreshSeconds != 20 {
+		config.Kobo.RefreshSeconds != 20 || config.Kobo.DisplayCommand != "eips" {
 		t.Fatalf("unexpected defaults: %+v", config.Kobo)
 	}
 }
@@ -753,10 +713,36 @@ func TestRequestJSONClassifiesSafeAPIErrorsWithoutLeakingDescription(t *testing.
 	}
 }
 
-func TestDashboardServesHTMLAndLatestPNG(t *testing.T) {
+func TestShowScreenWritesPNGAndDisplaysItWithEips(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("the Kobo eips launcher is a Linux command")
+	}
+	dir := t.TempDir()
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(oldDir); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	})
+
+	argumentFile := filepath.Join(dir, "eips-args.txt")
+	commandFile := filepath.Join(dir, "eips")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$SKYBOARD_EIPS_ARGS\"\n"
+	if err := os.WriteFile(commandFile, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SKYBOARD_EIPS_ARGS", argumentFile)
+
 	config := AppConfig{}
 	config.Kobo.Width = 600
 	config.Kobo.Height = 800
+	config.Kobo.DisplayCommand = commandFile
 	app, err := NewSkyboard(config)
 	if err != nil {
 		t.Fatal(err)
@@ -764,71 +750,29 @@ func TestDashboardServesHTMLAndLatestPNG(t *testing.T) {
 	if err := app.showScreen(nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	handler := app.dashboardHandler()
 
-	page := httptest.NewRecorder()
-	handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/", nil))
-	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), dashboardImage) {
-		t.Fatalf("dashboard response status=%d body=%q", page.Code, page.Body.String())
-	}
-
-	imageResponse := httptest.NewRecorder()
-	handler.ServeHTTP(imageResponse, httptest.NewRequest(http.MethodGet, dashboardImage, nil))
-	if imageResponse.Code != http.StatusOK || imageResponse.Header().Get("Content-Type") != "image/png" {
-		t.Fatalf("image response status=%d headers=%v", imageResponse.Code, imageResponse.Header())
-	}
-	decoded, err := png.Decode(bytes.NewReader(imageResponse.Body.Bytes()))
+	imagePath := filepath.Join(dir, screenImagePath)
+	file, err := os.Open(imagePath)
 	if err != nil {
-		t.Fatalf("decode served dashboard image: %v", err)
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(file)
+	if closeErr := file.Close(); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 	if decoded.Bounds().Dx() != 600 || decoded.Bounds().Dy() != 800 {
-		t.Fatalf("served image bounds = %v", decoded.Bounds())
+		t.Fatalf("written image bounds = %v", decoded.Bounds())
 	}
-}
 
-func TestDashboardPhotoLinkTracksDisplayedPhoto(t *testing.T) {
-	config := AppConfig{}
-	config.Kobo.Width = 600
-	config.Kobo.Height = 800
-	app, err := NewSkyboard(config)
+	args, err := os.ReadFile(argumentFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var photo bytes.Buffer
-	if err := png.Encode(&photo, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
-		t.Fatal(err)
-	}
-	if err := app.showScreen(&Flight{
-		Photo:     photo.Bytes(),
-		PhotoLink: "https://www.planespotters.net/photo/123/example",
-	}, nil); err != nil {
-		t.Fatal(err)
-	}
-	handler := app.dashboardHandler()
-	linkResponse := httptest.NewRecorder()
-	handler.ServeHTTP(linkResponse, httptest.NewRequest(http.MethodGet, "/photo-link", nil))
-	var result struct {
-		Link string `json:"link"`
-	}
-	if err := json.Unmarshal(linkResponse.Body.Bytes(), &result); err != nil {
-		t.Fatal(err)
-	}
-	if result.Link != "https://www.planespotters.net/photo/123/example" {
-		t.Fatalf("displayed photo link = %q", result.Link)
-	}
-	if !strings.Contains(string(dashboardHTML), "PHOTO + CRÉDIT") {
-		t.Fatal("dashboard does not provide a visible link to the credited photo")
-	}
-
-	if err := app.showScreen(nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	linkResponse = httptest.NewRecorder()
-	handler.ServeHTTP(linkResponse, httptest.NewRequest(http.MethodGet, "/photo-link", nil))
-	if err := json.Unmarshal(linkResponse.Body.Bytes(), &result); err != nil {
-		t.Fatal(err)
-	}
-	if result.Link != "" {
-		t.Fatalf("photo link after photo is no longer displayed = %q, want empty", result.Link)
+	expected := "-f\n-g\n" + imagePath + "\n"
+	if string(args) != expected {
+		t.Fatalf("eips arguments = %q, want %q", args, expected)
 	}
 }

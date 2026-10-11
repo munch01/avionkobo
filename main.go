@@ -21,7 +21,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -33,17 +35,13 @@ import (
 
 const (
 	configFile             = "config.json"
-	dashboardAddr          = "127.0.0.1:8787"
-	dashboardImage         = "/output/kobo_sky.png"
+	screenImagePath        = "output/kobo_sky.png"
 	maxAircraftPhotoBytes  = 4 << 20
 	maxAircraftPhotoPixels = 8_000_000
 )
 
 //go:embed cacert.pem
 var bundledCAPEM []byte
-
-//go:embed dashboard.html
-var dashboardHTML []byte
 
 type AppConfig struct {
 	Home struct {
@@ -52,9 +50,10 @@ type AppConfig struct {
 		Label     string  `json:"label"`
 	} `json:"home"`
 	Kobo struct {
-		Width          int `json:"width"`
-		Height         int `json:"height"`
-		RefreshSeconds int `json:"refresh_seconds"`
+		Width          int    `json:"width"`
+		Height         int    `json:"height"`
+		RefreshSeconds int    `json:"refresh_seconds"`
+		DisplayCommand string `json:"display_command"`
 	} `json:"kobo"`
 	OpenSky struct {
 		RadiusKM   float64 `json:"radius_km"`
@@ -89,25 +88,22 @@ type Weather struct {
 }
 
 type Skyboard struct {
-	config             AppConfig
-	httpClient         *http.Client
-	openSkyBase        string
-	openMeteoBase      string
-	adsbBase           string
-	adsbdbBase         string
-	commonsBase        string
-	planespottersBase  string
-	weatherMu          sync.Mutex
-	cachedWeather      *Weather
-	weatherExpires     time.Time
-	metadataMu         sync.Mutex
-	metadataKey        string
-	metadata           flightMetadataCache
-	lastFlightMu       sync.RWMutex
-	lastFlight         *Flight
-	imageMu            sync.RWMutex
-	imagePNG           []byte
-	displayedPhotoLink string
+	config            AppConfig
+	httpClient        *http.Client
+	openSkyBase       string
+	openMeteoBase     string
+	adsbBase          string
+	adsbdbBase        string
+	commonsBase       string
+	planespottersBase string
+	weatherMu         sync.Mutex
+	cachedWeather     *Weather
+	weatherExpires    time.Time
+	metadataMu        sync.Mutex
+	metadataKey       string
+	metadata          flightMetadataCache
+	lastFlightMu      sync.RWMutex
+	lastFlight        *Flight
 }
 
 type flightMetadataCache struct {
@@ -145,6 +141,9 @@ func loadConfig() (AppConfig, error) {
 	if config.Kobo.RefreshSeconds <= 0 {
 		config.Kobo.RefreshSeconds = 20
 	}
+	if strings.TrimSpace(config.Kobo.DisplayCommand) == "" {
+		config.Kobo.DisplayCommand = "eips"
+	}
 	if config.OpenSky.RadiusKM <= 0 {
 		config.OpenSky.RadiusKM = 80
 	}
@@ -152,6 +151,9 @@ func loadConfig() (AppConfig, error) {
 }
 
 func NewSkyboard(config AppConfig) (*Skyboard, error) {
+	if strings.TrimSpace(config.Kobo.DisplayCommand) == "" {
+		config.Kobo.DisplayCommand = "eips"
+	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(bundledCAPEM) {
 		return nil, errors.New("load bundled CA certificates")
@@ -1220,13 +1222,22 @@ func (app *Skyboard) showScreen(flight *Flight, weather *Weather) error {
 	if err := png.Encode(&encoded, img); err != nil {
 		return fmt.Errorf("encode screen image: %w", err)
 	}
-	app.imageMu.Lock()
-	app.imagePNG = encoded.Bytes()
-	app.displayedPhotoLink = ""
-	if flight != nil && len(flight.Photo) > 0 {
-		app.displayedPhotoLink = flight.PhotoLink
+	if err := os.MkdirAll(filepath.Dir(screenImagePath), 0755); err != nil {
+		return fmt.Errorf("create screen image directory: %w", err)
 	}
-	app.imageMu.Unlock()
+	if err := os.WriteFile(screenImagePath, encoded.Bytes(), 0644); err != nil {
+		return fmt.Errorf("write screen image: %w", err)
+	}
+	imagePath, err := filepath.Abs(screenImagePath)
+	if err != nil {
+		return fmt.Errorf("resolve screen image path: %w", err)
+	}
+	command := exec.Command(app.config.Kobo.DisplayCommand, "-f", "-g", imagePath)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("display screen with %q: %w: %s",
+			app.config.Kobo.DisplayCommand, err, strings.TrimSpace(string(output)))
+	}
 	if flight == nil || len(flight.Photo) == 0 {
 		app.metadataMu.Lock()
 		app.metadata.photo = nil
@@ -1234,59 +1245,6 @@ func (app *Skyboard) showScreen(flight *Flight, weather *Weather) error {
 		app.metadataKey = ""
 		app.metadataMu.Unlock()
 	}
-	return nil
-}
-
-func (app *Skyboard) dashboardHandler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write(dashboardHTML)
-	})
-	mux.HandleFunc("/photo-link", func(w http.ResponseWriter, r *http.Request) {
-		app.imageMu.RLock()
-		link := app.displayedPhotoLink
-		app.imageMu.RUnlock()
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(struct {
-			Link string `json:"link"`
-		}{Link: link})
-	})
-	mux.HandleFunc(dashboardImage, func(w http.ResponseWriter, r *http.Request) {
-		app.imageMu.RLock()
-		data := app.imagePNG
-		app.imageMu.RUnlock()
-		if len(data) == 0 {
-			http.Error(w, "SkyBoard image is not ready", http.StatusServiceUnavailable)
-			return
-		}
-		w.Header().Set("Content-Type", "image/png")
-		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write(data)
-	})
-	return mux
-}
-
-func (app *Skyboard) startDashboard() error {
-	listener, err := newDashboardListener(dashboardAddr)
-	if err != nil {
-		return fmt.Errorf("listen for local dashboard on %s: %w", dashboardAddr, err)
-	}
-	server := &http.Server{
-		Handler:           app.dashboardHandler(),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-	go func() {
-		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("local dashboard server failed: %v", err)
-		}
-	}()
 	return nil
 }
 
@@ -1332,10 +1290,6 @@ func main() {
 	if err := app.showScreen(nil, nil); err != nil {
 		log.Fatal(err)
 	}
-	log.Print("Initial dashboard image rendered")
-	if err := app.startDashboard(); err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("local dashboard available at http://%s/", dashboardAddr)
+	log.Print("Initial Kobo screen rendered")
 	app.run(ctx)
 }

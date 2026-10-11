@@ -7,7 +7,8 @@
   "kobo": {
     "width": 600,
     "height": 800,
-    "refresh_seconds": 20
+    "refresh_seconds": 20,
+    "display_command": "eips"
   },
   "opensky": {
     "radius_km": 80,
