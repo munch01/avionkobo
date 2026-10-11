@@ -5,3 +5,4 @@ config.json
 *.png
 venv/
 .git/
+skyboard-arm

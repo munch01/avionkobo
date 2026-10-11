@@ -7,14 +7,7 @@
   "kobo": {
     "width": 600,
     "height": 800,
-    "refresh_seconds": 20,
-    "display_command": "eips"
-  },
-  "netatmo": {
-    "client_id": "YOUR_NETATMO_CLIENT_ID",
-    "client_secret": "YOUR_NETATMO_CLIENT_SECRET",
-    "username": "YOUR_NETATMO_USERNAME",
-    "password": "YOUR_NETATMO_PASSWORD"
+    "refresh_seconds": 20
   },
   "opensky": {
     "radius_km": 80,

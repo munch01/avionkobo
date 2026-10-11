@@ -1,72 +1,54 @@
 # Kobo Skyboard
 
-Application Kobo pour afficher le vol le plus proche de chez toi et la météo la plus proche de la station Netatmo.
+Application pour Kobo Aura N514 : affiche l'avion le plus proche, ses informations disponibles et la météo publique à la position de référence. L'écran est en niveaux de gris et se rafraîchit toutes les 20 secondes par défaut.
 
-Caractéristiques :
-- récupération des avions autour de ta position via OpenSky
-- choix du vol le plus proche
-- affichage noir/blanc inspiré d'Avioframe
-- affichage des informations altitude, vitesse, type d'avion
-- récupération de la station météo Netatmo la plus proche
-- affichage température, vent, pluie, humidité
-- rafraîchissement toutes les 20 secondes
-- compatible avec NickelMenu
+Les positions et types d'appareils proviennent d'ADSB.lol. La compagnie et l'itinéraire sont recherchés gratuitement auprès d'ADSBDB à partir de l'indicatif radio ; ces détails peuvent manquer pour certains vols. Le tableau de bord affiche compagnie, immatriculation et modèle sur une seule ligne. Une photo de l'appareil exact est recherchée gratuitement sur Planespotters.net à partir de son immatriculation ; à défaut, Wikimedia Commons fournit une photo du modèle ou du constructeur quand elle existe. Le photographe est crédité et la photo Planespotters est cliquable pour ouvrir sa page d'origine. Les conditions météo (température, humidité, précipitations et vent) proviennent d'Open-Meteo, sans compte ni clé API, et sont mises en cache 10 minutes.
+
+Le programme est compilé en Go comme un binaire Linux ARMv7 statique. Il ne nécessite ni Python, ni Pillow, ni bibliothèques système supplémentaires sur la liseuse.
 
 ## Fichiers
-- `skyboard.py` : cœur de l'application
-- `launcher.sh` : script lancé depuis NickelMenu
-- `config.example.json` : template de configuration
-- `requirements.txt` : dépendances Python
 
-## Installation locale
+- `main.go` : récupération des données, dessin et affichage de l'écran
+- `main_test.go` : tests unitaires
+- `launcher.sh` : lance l'application et enregistre les erreurs dans `skyboard.log`
+- `dashboard.html` : affiche et actualise l'image dans le navigateur intégré de la Kobo
+- `config.example.json` : exemple de configuration sans identifiants
+- `cacert.pem` : certificats racines Mozilla intégrés pour HTTPS sur les anciens firmwares
 
-1. Copier le projet sur la Kobo dans `/mnt/onboard/.adds/kobo-skyboard`
-2. Créer un fichier `config.json` à partir du template
-3. Installer les dépendances :
+## Compiler et tester
 
-```sh
-python3 -m pip install -r requirements.txt
-```
-
-4. Rendre le launcher exécutable :
+Avec Go installé :
 
 ```sh
-chmod +x /mnt/onboard/.adds/kobo-skyboard/launcher.sh
+go test ./...
+GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o skyboard-arm .
 ```
+
+Le binaire `skyboard-arm` doit être compilé pour ARMv7 ; un exécutable Windows ou Linux x86 ne fonctionnera pas sur la Kobo.
+
+## Installation sur la Kobo
+
+1. Copier `skyboard-arm`, `launcher.sh`, `dashboard.html`, `cacert.pem` et `config.example.json` dans `/mnt/onboard/.adds/kobo-skyboard/`.
+2. Créer `config.json` à partir de `config.example.json` et renseigner les coordonnées de référence.
+3. Ajouter cette entrée à un fichier de configuration NickelMenu dans `/mnt/onboard/.adds/nm/` :
+
+   ```txt
+   menu_item :main :SkyBoard :cmd_spawn :quiet:/bin/sh /mnt/onboard/.adds/kobo-skyboard/launcher.sh
+     chain_success :nickel_browser :modal:http://127.0.0.1:8787/
+   ```
+
+4. Éjecter proprement la liseuse et la redémarrer. Lancer ensuite **SkyBoard** depuis NickelMenu. NickelMenu démarrera le service en arrière-plan et ouvrira le tableau de bord local dans le navigateur Kobo.
+
+Le binaire sert le tableau de bord et son image en mémoire sur `127.0.0.1:8787`, puis le navigateur local actualise l'image périodiquement. Cela ne dépend pas de l'écriture d'un PNG sur le stockage Kobo. Les erreurs de démarrage et de réseau sont journalisées dans `skyboard.log`.
 
 ## Configuration
 
-Copier le fichier de configuration :
+Copier le modèle puis modifier :
 
-```sh
-cp config.example.json config.json
-```
+- `home.lat` et `home.lon` : latitude et longitude de la position de référence
+- `home.lat` et `home.lon` : coordonnées utilisées pour les avions et la météo publique
+- `home.label` : nom affiché avec les conditions météo
+- `opensky.radius_km` : rayon de recherche des vols
+- `kobo.refresh_seconds` : intervalle de rafraîchissement
 
-Puis modifier :
-- `home.lat` et `home.lon` pour ta position
-- `netatmo.client_id`, `netatmo.client_secret`, `netatmo.username`, `netatmo.password`
-
-## Lancer depuis NickelMenu
-
-Dans la config NickelMenu :
-
-```txt
-SkyBoard | /mnt/onboard/.adds/kobo-skyboard/launcher.sh
-```
-
-## Push GitHub
-
-```bash
-git init
-git add .
-git commit -m "Initial Kobo skyboard app"
-git branch -M main
-git remote add origin <URL_GITHUB>
-git push -u origin main
-```
-
-## Notes
-
-- Le type d'avion provient des métadonnées OpenSky si disponibles.
-- Le script est conçu pour être robuste et afficher un PNG local en fallback si `eips` n'est pas présent.
-- Sur une vraie Kobo, il faut vérifier que `python3`, `Pillow` et `eips` sont bien présents.
+Les anciennes clés `netatmo` éventuellement présentes dans `config.json` sont ignorées. Le fichier reste exclu de Git.
