@@ -2,7 +2,7 @@
 
 Application pour Kobo Aura N514 : affiche l'avion le plus proche, ses informations disponibles et la météo publique à la position de référence. L'écran est en niveaux de gris et se rafraîchit toutes les 20 secondes par défaut.
 
-Les positions et types d'appareils proviennent d'ADSB.lol. La compagnie et l'itinéraire sont recherchés gratuitement auprès d'ADSBDB à partir de l'indicatif radio ; ces détails peuvent manquer pour certains vols. Le tableau de bord affiche compagnie, immatriculation et modèle sur une seule ligne. Une photo de l'appareil exact est recherchée gratuitement sur Planespotters.net à partir de son immatriculation ; à défaut, Wikimedia Commons fournit une photo du modèle ou du constructeur quand elle existe. Le photographe est crédité et la photo Planespotters est cliquable pour ouvrir sa page d'origine. Les conditions météo (température, humidité, précipitations et vent) proviennent d'Open-Meteo, sans compte ni clé API, et sont mises en cache 10 minutes.
+Les positions et types d'appareils proviennent d'ADSB.lol. La compagnie et l'itinéraire sont recherchés gratuitement auprès d'ADSBDB à partir de l'indicatif radio ; ces détails peuvent manquer pour certains vols. Le tableau de bord affiche le numéro de vol et la compagnie sur une ligne, puis le type d'appareil en dessous. Si la recherche ne détecte temporairement aucun appareil, le dernier avion détecté reste affiché. Une photo de l'appareil exact est recherchée gratuitement sur Planespotters.net à partir de son immatriculation ; à défaut, Wikimedia Commons fournit une photo du modèle ou du constructeur quand elle existe. Le photographe est crédité et la photo Planespotters est cliquable pour ouvrir sa page d'origine. Les conditions météo (température, humidité, précipitations et vent) proviennent d'Open-Meteo, sans compte ni clé API, sont mises en cache 10 minutes et affichées en quatre colonnes avec des pictogrammes, sans libellé de lieu.
 
 Le programme est compilé en Go comme un binaire Linux ARMv7 statique. Il ne nécessite ni Python, ni Pillow, ni bibliothèques système supplémentaires sur la liseuse.
 
@@ -45,9 +45,7 @@ Le binaire sert le tableau de bord et son image en mémoire sur `127.0.0.1:8787`
 
 Copier le modèle puis modifier :
 
-- `home.lat` et `home.lon` : latitude et longitude de la position de référence
 - `home.lat` et `home.lon` : coordonnées utilisées pour les avions et la météo publique
-- `home.label` : nom affiché avec les conditions météo
 - `opensky.radius_km` : rayon de recherche des vols
 - `kobo.refresh_seconds` : intervalle de rafraîchissement
 

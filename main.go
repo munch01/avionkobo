@@ -103,6 +103,8 @@ type Skyboard struct {
 	metadataMu         sync.Mutex
 	metadataKey        string
 	metadata           flightMetadataCache
+	lastFlightMu       sync.RWMutex
+	lastFlight         *Flight
 	imageMu            sync.RWMutex
 	imagePNG           []byte
 	displayedPhotoLink string
@@ -300,7 +302,7 @@ func (app *Skyboard) nearestFlight() (*Flight, error) {
 		radiusNM,
 	)
 	if err := app.requestJSON(http.MethodGet, endpoint, nil, nil, &response); err != nil {
-		return nil, err
+		return app.previousFlight(), err
 	}
 
 	var best *Flight
@@ -347,8 +349,23 @@ func (app *Skyboard) nearestFlight() (*Flight, error) {
 	}
 	if best != nil {
 		app.enrichFlight(best)
+		app.lastFlightMu.Lock()
+		app.lastFlight = best
+		app.lastFlightMu.Unlock()
+		return best, nil
 	}
-	return best, nil
+	return app.previousFlight(), nil
+}
+
+func (app *Skyboard) previousFlight() *Flight {
+	app.lastFlightMu.RLock()
+	defer app.lastFlightMu.RUnlock()
+	if app.lastFlight == nil {
+		return nil
+	}
+	flight := *app.lastFlight
+	flight.Photo = append([]byte(nil), flight.Photo...)
+	return &flight
 }
 
 func (app *Skyboard) enrichFlight(flight *Flight) {
@@ -1065,6 +1082,52 @@ func shortened(value string, maxCharacters int) string {
 	return string(runes[:maxCharacters-1]) + "?"
 }
 
+func drawWeatherIcon(img *image.Gray, kind string, centerX, topY int) {
+	switch kind {
+	case "temperature":
+		line(img, centerX, topY+3, centerX, topY+24, 3, 0)
+		line(img, centerX-4, topY+3, centerX+4, topY+3, 2, 0)
+		line(img, centerX-4, topY+3, centerX-4, topY+20, 2, 0)
+		line(img, centerX+4, topY+3, centerX+4, topY+20, 2, 0)
+		disk(img, centerX, topY+25, 6, 0)
+	case "wind":
+		line(img, centerX-17, topY+7, centerX+14, topY+7, 2, 0)
+		line(img, centerX+14, topY+7, centerX+19, topY+3, 2, 0)
+		line(img, centerX-12, topY+15, centerX+17, topY+15, 2, 0)
+		line(img, centerX-17, topY+23, centerX+8, topY+23, 2, 0)
+		line(img, centerX+8, topY+23, centerX+13, topY+19, 2, 0)
+	case "humidity":
+		line(img, centerX, topY+1, centerX-11, topY+17, 2, 0)
+		line(img, centerX, topY+1, centerX+11, topY+17, 2, 0)
+		line(img, centerX-11, topY+17, centerX-7, topY+25, 2, 0)
+		line(img, centerX+11, topY+17, centerX+7, topY+25, 2, 0)
+		line(img, centerX-7, topY+25, centerX+7, topY+25, 2, 0)
+		disk(img, centerX, topY+17, 7, 255)
+	case "rain":
+		line(img, centerX-13, topY+8, centerX+13, topY+8, 2, 0)
+		line(img, centerX-13, topY+8, centerX-9, topY+3, 2, 0)
+		line(img, centerX-9, topY+3, centerX-3, topY+3, 2, 0)
+		line(img, centerX-3, topY+3, centerX, topY, 2, 0)
+		line(img, centerX, topY, centerX+7, topY, 2, 0)
+		line(img, centerX+7, topY, centerX+13, topY+8, 2, 0)
+		for _, x := range []int{centerX - 8, centerX, centerX + 8} {
+			line(img, x, topY+14, x-3, topY+22, 2, 0)
+		}
+	}
+}
+
+func centeredText(img *image.Gray, centerX, y, scale int, value string, shade uint8) {
+	text(img, centerX-len([]rune(value))*6*scale/2, y, scale, value, shade)
+}
+
+func flightDisplayLines(flight *Flight) (string, string) {
+	callsign := strings.ReplaceAll(flight.Callsign, " ", "")
+	company := firstNonEmpty(flight.Airline, "COMPAGNIE INCONNUE")
+	flightNumber := firstNonEmpty(flight.FlightNumber, callsign)
+	model := firstNonEmpty(flight.AircraftModel, flight.AircraftType, "TYPE INCONNU")
+	return company + " / " + flightNumber, model
+}
+
 func renderScreen(config AppConfig, flight *Flight, weather *Weather, _ time.Time) *image.Gray {
 	width, height := config.Kobo.Width, config.Kobo.Height
 	img := image.NewGray(image.Rect(0, 0, width, height))
@@ -1083,20 +1146,17 @@ func renderScreen(config AppConfig, flight *Flight, weather *Weather, _ time.Tim
 	line(img, 18, 245, width-19, 245, 2, 0)
 	line(img, 18, 564, width-19, 564, 2, 0)
 	if flight != nil {
-		callsign := strings.ReplaceAll(flight.Callsign, " ", "")
-		company := firstNonEmpty(flight.Airline, "COMPAGNIE INCONNUE")
-		registration := firstNonEmpty(flight.Registration, callsign)
-		model := firstNonEmpty(flight.AircraftModel, flight.AircraftType, "TYPE INCONNU")
-		flightSummary := company + " / " + registration + " / " + model
+		flightSummary, model := flightDisplayLines(flight)
 		route := "TRAJET INCONNU"
 		if flight.Origin != "" && flight.Destination != "" {
 			route = flight.Origin + " > " + flight.Destination
 		}
 		text(img, 36, 270, 2, shortened(flightSummary, (width-72)/12), 0)
-		text(img, 36, 326, 3, shortened(route, (width-72)/18), 0)
-		text(img, 36, 390, 3, "ALT "+number(flight.AltitudeFeet, 0)+" FT", 0)
-		text(img, 36, 434, 3, "VIT "+number(flight.SpeedKMH, 0)+" KM/H", 0)
-		text(img, 36, 478, 2, "DIST "+strconv.FormatFloat(flight.DistanceKM, 'f', 1, 64)+" KM", 0)
+		text(img, 36, 300, 2, shortened(model, (width-72)/12), 0)
+		text(img, 36, 338, 3, shortened(route, (width-72)/18), 0)
+		text(img, 36, 396, 3, "ALT "+number(flight.AltitudeFeet, 0)+" FT", 0)
+		text(img, 36, 440, 3, "VIT "+number(flight.SpeedKMH, 0)+" KM/H", 0)
+		text(img, 36, 484, 2, "DIST "+strconv.FormatFloat(flight.DistanceKM, 'f', 1, 64)+" KM", 0)
 	} else {
 		text(img, 36, 360, 3, "AUCUN AVION DETECTE", 0)
 	}
@@ -1104,12 +1164,20 @@ func renderScreen(config AppConfig, flight *Flight, weather *Weather, _ time.Tim
 	fillRect(img, 18, 580, width-18, height-18, 230)
 	line(img, 18, 580, width-19, 580, 2, 0)
 	if weather != nil {
-		text(img, 36, 600, 3, shortened(weather.Name, (width-72)/18), 0)
-		text(img, 36, 635, 3, "TEMP "+number(weather.Temperature, 1)+" C", 0)
-		text(img, 36, 665, 3, "VENT "+number(weather.WindKMH, 0)+" KM/H", 0)
-		text(img, 36, 695, 3, "PLUIE "+number(weather.RainMM, 1)+" MM", 0)
-		text(img, 36, 725, 3, "HUM "+number(weather.Humidity, 0)+"%", 0)
-		text(img, 300, 600, 2, "DIST "+strconv.FormatFloat(weather.DistanceKM, 'f', 1, 64)+" KM", 0)
+		centers := []int{width / 8, 3 * width / 8, 5 * width / 8, 7 * width / 8}
+		icons := []string{"temperature", "wind", "humidity", "rain"}
+		labels := []string{"TEMP", "VENT", "HUMID", "PLUIE"}
+		values := []string{
+			number(weather.Temperature, 1) + " C",
+			number(weather.WindKMH, 0) + " KM/H",
+			number(weather.Humidity, 0) + "%",
+			number(weather.RainMM, 1) + " MM",
+		}
+		for i, centerX := range centers {
+			drawWeatherIcon(img, icons[i], centerX, 600)
+			centeredText(img, centerX, 648, 2, labels[i], 0)
+			centeredText(img, centerX, 688, 2, values[i], 0)
+		}
 	} else {
 		text(img, 36, 620, 3, "METEO INDISPONIBLE", 0)
 	}
@@ -1199,7 +1267,6 @@ func (app *Skyboard) run(ctx context.Context) {
 		flight, err := app.nearestFlight()
 		if err != nil {
 			log.Printf("OpenSky flight lookup failed: %v", err)
-			flight = nil
 		}
 		weather, err := app.nearestWeather()
 		if err != nil {

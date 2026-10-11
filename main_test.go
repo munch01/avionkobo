@@ -162,6 +162,43 @@ func TestRenderScreenProducesGrayscalePNG(t *testing.T) {
 	}
 }
 
+func TestWeatherLayoutOmitsPlaceAndDrawsFourIcons(t *testing.T) {
+	config := AppConfig{}
+	config.Kobo.Width = 600
+	config.Kobo.Height = 800
+	temperature, wind, rain, humidity := 16.5, 12.0, 0.4, 61.0
+	weather := &Weather{
+		Name:        "Ma ville",
+		DistanceKM:  12.3,
+		Temperature: &temperature,
+		WindKMH:     &wind,
+		RainMM:      &rain,
+		Humidity:    &humidity,
+	}
+	withPlace := renderScreen(config, nil, weather, time.Time{})
+	weather.Name = "Un autre lieu"
+	weather.DistanceKM = 99
+	withoutPlace := renderScreen(config, nil, weather, time.Time{})
+	if !bytes.Equal(withPlace.Pix, withoutPlace.Pix) {
+		t.Fatal("weather place name or distance should not be rendered")
+	}
+
+	centers := []int{75, 225, 375, 525}
+	for i, centerX := range centers {
+		darkPixels := 0
+		for y := 600; y < 632; y++ {
+			for x := centerX - 22; x <= centerX+22; x++ {
+				if withPlace.GrayAt(x, y).Y < 255 {
+					darkPixels++
+				}
+			}
+		}
+		if darkPixels == 0 {
+			t.Errorf("weather icon %d has no visible pixels", i+1)
+		}
+	}
+}
+
 func TestRawFloatHandlesNull(t *testing.T) {
 	if rawFloat(json.RawMessage("null")) != nil {
 		t.Fatal("null JSON value should not become a number")
@@ -198,6 +235,20 @@ func TestAircraftDetailsFormatting(t *testing.T) {
 			}
 			t.Fatalf("Commons search terms = %v, want %q", terms, test.want)
 		})
+	}
+}
+
+func TestFlightDisplayLinesSeparateAircraftModel(t *testing.T) {
+	summary, model := flightDisplayLines(&Flight{
+		Airline:       "Air France",
+		FlightNumber:  "AF77",
+		AircraftModel: "Airbus A320-251N NEO",
+	})
+	if summary != "Air France / AF77" {
+		t.Fatalf("flight summary = %q, want Air France / AF77", summary)
+	}
+	if model != "Airbus A320-251N NEO" {
+		t.Fatalf("aircraft model line = %q", model)
 	}
 }
 
@@ -409,6 +460,43 @@ func TestNearestFlightRejectsStaleAircraftPositions(t *testing.T) {
 	}
 	if flight != nil {
 		t.Fatalf("stale aircraft position should be ignored, got %+v", flight)
+	}
+}
+
+func TestNearestFlightReusesLastFlightWhenNoAircraftAreDetected(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v2/lat/45.6833/lon/0.2167/dist/44" {
+			fmt.Fprint(w, `{"ac":[]}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	config := AppConfig{}
+	config.Home.Latitude, config.Home.Longitude = 45.6833, 0.2167
+	config.OpenSky.RadiusKM = 80
+	app, err := NewSkyboard(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.httpClient = server.Client()
+	app.adsbBase = server.URL
+	app.lastFlight = &Flight{
+		Callsign:      "AFR77MQ",
+		FlightNumber:  "AF77",
+		Airline:       "Air France",
+		AircraftModel: "Airbus A320neo",
+		DistanceKM:    12.3,
+	}
+
+	flight, err := app.nearestFlight()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if flight == nil || flight.FlightNumber != "AF77" ||
+		flight.AircraftModel != "Airbus A320neo" || flight.DistanceKM != 12.3 {
+		t.Fatalf("last detected flight was not retained: %+v", flight)
 	}
 }
 
